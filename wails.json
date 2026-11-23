@@ -1,0 +1,11 @@
+{
+  "name": "Browser Extension Manager",
+  "outputfilename": "extension-manager",
+  "frontend:dir": "frontend",
+  "author": {"name": "jamiu99"},
+  "info": {
+    "companyName": "jamiu99",
+    "productName": "Browser Extension Manager",
+    "productVersion": "0.1.0"
+  }
+}
