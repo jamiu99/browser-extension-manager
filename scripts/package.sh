@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 target=$1
 archive=$2
 tags=${3:-}
-version=${GITHUB_REF_NAME:-v0.1.0}
+version=${GITHUB_REF_NAME:-v0.1.1}
 commit=$(git rev-parse HEAD)
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 wails_version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)
@@ -33,7 +33,8 @@ file="$PWD/dist/extension-manager-$version-$archive"
 case "$target" in
   windows/*)
     cp build/bin/extension-manager.exe "$bundle"
-    tar.exe -a -c -f "$file.zip" -C "$bundle" extension-manager.exe release.json update-feed.md THIRD-PARTY-NOTICES.txt
+    BUNDLE_WIN=$(cygpath -aw "$bundle") ARCHIVE_WIN=$(cygpath -aw "$file.zip") \
+      powershell.exe -NoProfile -NonInteractive -Command '$ErrorActionPreference = "Stop"; Compress-Archive -Path (Join-Path $env:BUNDLE_WIN "*") -DestinationPath $env:ARCHIVE_WIN -Force'
     ;;
   darwin/*)
     cp -R "build/bin/Browser Extension Manager.app" "$bundle"
