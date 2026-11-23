@@ -48,7 +48,7 @@ jobs:
       - name: Check Windows icon and GUI subsystem
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/verify-windows.ps1 ./build/bin/extension-manager.exe
+        run: ./scripts/verify-windows.ps1 ./build/bin/extension-manager.exe "./dist/extension-manager-${env:GITHUB_REF_NAME}-windows-x64.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.archive }}
@@ -70,8 +70,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd release
-          test -s "extension-manager-${GITHUB_REF_NAME}-windows-x64.zip"
-          test -s "extension-manager-${GITHUB_REF_NAME}-macos-universal.zip"
-          test -s "extension-manager-${GITHUB_REF_NAME}-linux-x64.tar.gz"
+          unzip -tq "extension-manager-${GITHUB_REF_NAME}-windows-x64.zip"
+          unzip -tq "extension-manager-${GITHUB_REF_NAME}-macos-universal.zip"
+          tar -tzf "extension-manager-${GITHUB_REF_NAME}-linux-x64.tar.gz"
           sha256sum extension-manager-* > SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file ../docs/release-notes.md extension-manager-* SHA256SUMS.txt

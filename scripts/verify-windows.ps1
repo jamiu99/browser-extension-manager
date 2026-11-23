@@ -1,4 +1,7 @@
-param([Parameter(Mandatory = $true)][string]$Path)
+param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Archive
+)
 $ErrorActionPreference = 'Stop'
 $exe = (Resolve-Path -LiteralPath $Path).Path
 $bytes = [IO.File]::ReadAllBytes($exe)
@@ -29,3 +32,12 @@ try {
     $null = [ExecutableResources]::FreeLibrary($module)
 }
 Write-Output 'Verified Windows GUI subsystem and application icon group.'
+$zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Archive).Path)
+try {
+    foreach ($name in 'extension-manager.exe', 'release.json', 'update-feed.md', 'THIRD-PARTY-NOTICES.txt') {
+        if (-not $zip.GetEntry($name)) { throw "Missing $name in Windows ZIP" }
+    }
+} finally {
+    $zip.Dispose()
+}
+Write-Output 'Verified Windows ZIP contents.'
