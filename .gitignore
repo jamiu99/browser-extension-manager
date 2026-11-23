@@ -1,0 +1,14 @@
+/build/bin/
+/build/windows/installer/
+/*.syso
+/dist/
+/wailsjs/
+/frontend/wailsjs/
+/.DS_Store
+/extensions.json
+/ReleaseSources.json
+/build/windows/icon.ico
+/build/windows/info.json
+/build/windows/wails.exe.manifest
+/build/darwin/Info.plist
+/build/darwin/Info.dev.plist

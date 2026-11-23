@@ -1,0 +1,77 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  package:
+    name: Package ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: windows/amd64
+            archive: windows-x64
+            tags: ''
+          - runner: macos-15
+            target: darwin/universal
+            archive: macos-universal
+            tags: ''
+          - runner: ubuntu-24.04
+            target: linux/amd64
+            archive: linux-x64
+            tags: webkit2_41
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: .go-version
+      - name: Install native Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Verify extension workflows
+        run: go test ./internal/...
+      - name: Build and archive
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHIVE: ${{ matrix.archive }}
+          BUILD_TAGS: ${{ matrix.tags }}
+        run: ./scripts/package.sh "$TARGET" "$ARCHIVE" "$BUILD_TAGS"
+      - name: Check Windows icon and GUI subsystem
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows.ps1 ./build/bin/extension-manager.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    runs-on: ubuntu-24.04
+    needs: package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          test -s "extension-manager-${GITHUB_REF_NAME}-windows-x64.zip"
+          test -s "extension-manager-${GITHUB_REF_NAME}-macos-universal.zip"
+          test -s "extension-manager-${GITHUB_REF_NAME}-linux-x64.tar.gz"
+          sha256sum extension-manager-* > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file ../docs/release-notes.md extension-manager-* SHA256SUMS.txt

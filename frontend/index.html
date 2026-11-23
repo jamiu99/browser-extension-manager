@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'">
+  <title>浏览器插件管理器</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <div><h1>插件库</h1><p id="count">正在读取插件</p></div>
+    </div>
+    <nav aria-label="插件库操作">
+      <button id="import" class="quiet">导入已安装</button>
+      <button id="guide" class="quiet">更新源指南</button>
+      <button id="check">检查更新</button>
+      <button id="add" class="primary">＋ 添加插件</button>
+    </nav>
+  </header>
+  <main>
+    <section class="library" aria-label="插件列表" aria-busy="true">
+      <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索插件名称或浏览器" aria-label="搜索插件名称或浏览器"></label>
+      <div class="columns" aria-hidden="true"><span>插件</span><span>已加载到</span><span>更新状态</span></div>
+      <div id="entries" class="entries"></div>
+    </section>
+    <aside class="details" id="detail" aria-label="插件详情"></aside>
+  </main>
+  <footer>
+    <div id="activity" role="status" aria-live="polite">正在读取插件</div>
+    <button id="all" type="button">全部更新</button>
+  </footer>
+  <dialog id="edit">
+    <form id="source-form">
+      <header class="dialog-title"><h2 id="edit-title">添加插件</h2><button type="button" class="close" data-close="edit" aria-label="关闭">×</button></header>
+      <p>选择已解压的插件目录，或填写 ZIP 和版本清单地址。</p>
+      <label for="path">插件目录</label>
+      <div class="field"><input id="path" placeholder="可留空，由管理器解压"><button id="folder" type="button">选择目录</button></div>
+      <label for="source">更新来源</label>
+      <div class="field"><input id="source" placeholder="HTTPS 版本清单、ZIP 或本地路径"><button id="zip" type="button">选择 ZIP</button></div>
+      <label class="choice"><input id="manifest" type="checkbox">来源是 JSON 版本清单</label>
+      <p id="edit-error" class="error" role="status"></p>
+      <div class="dialog-buttons"><button type="button" data-close="edit">取消</button><button id="save" class="primary" type="submit">保存插件</button></div>
+    </form>
+  </dialog>
+  <dialog id="guide-dialog">
+    <header class="dialog-title"><h2>更新源指南</h2><button type="button" class="close" data-close="guide-dialog" aria-label="关闭">×</button></header>
+    <div id="guide-content"></div>
+    <div class="dialog-buttons"><button id="copy-guide">复制完整指南</button><button class="primary" id="copy-prompt">复制 AI 提示词</button></div>
+  </dialog>
+</body>
+</html>
