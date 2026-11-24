@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	goruntime "runtime"
 	"strings"
 
 	"github.com/jamiu99/browser-extension-manager/internal/manager"
@@ -37,16 +38,17 @@ type App struct {
 }
 
 type Catalog struct {
-	Extensions []manager.Extension `json:"extensions"`
-	Browsers   []manager.Browser   `json:"browsers"`
-	Version    string              `json:"version"`
-	Commit     string              `json:"commit"`
-	BuiltAt    string              `json:"builtAt"`
+	Extensions      []manager.Extension `json:"extensions"`
+	Browsers        []manager.Browser   `json:"browsers"`
+	Version         string              `json:"version"`
+	Commit          string              `json:"commit"`
+	BuiltAt         string              `json:"builtAt"`
+	AutomaticReload bool                `json:"automaticReload"`
 }
 
 func (a *App) Catalog(importInstalled bool) (Catalog, error) {
 	items, err := a.store.List(importInstalled)
-	return Catalog{items, a.store.Browsers, version, commit, builtAt}, err
+	return Catalog{items, a.store.Browsers, version, commit, builtAt, goruntime.GOOS == "windows"}, err
 }
 
 func (a *App) Save(folder, source, kind string) (manager.Entry, error) {

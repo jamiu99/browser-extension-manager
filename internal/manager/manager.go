@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -27,11 +28,11 @@ type Entry struct {
 
 type Extension struct {
 	Entry
-	Name     string   `json:"name"`
-	Version  string   `json:"version"`
-	Icon     string   `json:"icon,omitempty"`
-	Browsers []string `json:"browsers"`
-	ID       string   `json:"id"`
+	Name     string        `json:"name"`
+	Version  string        `json:"version"`
+	Icon     string        `json:"icon,omitempty"`
+	Browsers []string      `json:"browsers"`
+	Loads    []BrowserLoad `json:"-"`
 }
 
 type manifest struct {
@@ -206,14 +207,10 @@ func (s *Store) list(only bool) ([]Extension, error) {
 		}
 		for _, found := range loaded {
 			if pathKey(found.Path) == pathKey(entry.Path) {
-				ext.ID = found.ID
-				present := false
-				for _, b := range ext.Browsers {
-					if b == found.Browser {
-						present = true
-					}
+				if !slices.Contains(ext.Loads, found.BrowserLoad) {
+					ext.Loads = append(ext.Loads, found.BrowserLoad)
 				}
-				if !present {
+				if !slices.Contains(ext.Browsers, found.Browser) {
 					ext.Browsers = append(ext.Browsers, found.Browser)
 				}
 			}

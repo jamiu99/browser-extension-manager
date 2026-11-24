@@ -5,6 +5,7 @@ const api = () => window.go.main.App;
 const state = {
   items: [], browsers: [], checked: new Set(), targets: new Set(),
   focused: "", results: new Map(), busy: false, guide: "", version: "",
+  automaticReload: false,
 };
 
 const labels = {
@@ -90,10 +91,12 @@ function drawDetail() {
 
 async function load(importInstalled = false) {
   const catalog = await api().Catalog(importInstalled);
+  const firstLoad = state.browsers.length === 0;
   state.items = catalog.extensions ?? [];
   state.browsers = catalog.browsers ?? [];
   state.version = catalog.version;
-  if (state.targets.size === 0 && state.browsers.length) {
+  state.automaticReload = catalog.automaticReload;
+  if (firstLoad && state.browsers.length) {
     state.targets.add(state.browsers[0].id);
   }
   if (!focused()) {
@@ -127,9 +130,11 @@ async function check(items, apply) {
     });
     if (apply) {
       await load();
-      const changed = results.filter((item) => item.state === "updated").map((item) => item.path);
-      if (changed.length && state.targets.size) {
-        const messages = await api().Activate([...state.targets], changed, false);
+      const ready = results.filter((item) => item.state === "updated" ||
+        (state.automaticReload && item.state === "current")).map((item) => item.path);
+      if (ready.length && state.targets.size) {
+        schedule(summary.concat("正在让所选浏览器重新加载插件…").join("\n"));
+        const messages = await api().Activate([...state.targets], ready, false);
         summary.push(...messages);
       }
     }
@@ -197,7 +202,7 @@ $("detail").addEventListener("click", (event) => {
   });
   if (id === "install" || id === "reload") {
     const install = id === "install";
-    run("正在打开浏览器扩展页…", async () => {
+    run(install ? "正在打开浏览器扩展页…" : "正在让所选浏览器重新加载插件…", async () => {
       const paths = install ? [item.path] : selected().map((entry) => entry.path);
       const messages = await api().Activate([...state.targets], paths, install);
       schedule(messages.join("\n"));

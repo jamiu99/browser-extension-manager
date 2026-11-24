@@ -73,10 +73,15 @@ func Browsers() []Browser {
 	return result
 }
 
-type loadedExtension struct {
-	Path    string
-	ID      string
+type BrowserLoad struct {
 	Browser string
+	Profile string
+	ID      string
+}
+
+type loadedExtension struct {
+	BrowserLoad
+	Path string
 }
 
 func scanBrowsers(browsers []Browser) []loadedExtension {
@@ -105,7 +110,7 @@ func scanBrowsers(browsers []Browser) []loadedExtension {
 					if entry.Location != 4 || !filepath.IsAbs(entry.Path) || !fileExists(filepath.Join(entry.Path, "manifest.json")) {
 						continue
 					}
-					result = append(result, loadedExtension{filepath.Clean(entry.Path), id, browser.ID})
+					result = append(result, loadedExtension{BrowserLoad{browser.ID, name, id}, filepath.Clean(entry.Path)})
 				}
 			}
 		}
