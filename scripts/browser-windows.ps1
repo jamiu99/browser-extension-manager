@@ -2,26 +2,6 @@
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 
-function Read-ExtensionManifest($Directory) {
-    [IO.File]::ReadAllText((Join-Path $Directory 'manifest.json')) | ConvertFrom-Json
-}
-
-function Get-ExtensionDisplayName($Directory, $Manifest) {
-    if ($Manifest.name -notmatch '^__MSG_([a-zA-Z0-9_@]+)__$') { return $Manifest.name }
-    $key = $Matches[1]
-    $culture = [Globalization.CultureInfo]::CurrentUICulture
-    $locales = @($culture.Name.Replace('-', '_'), $culture.TwoLetterISOLanguageName, $Manifest.default_locale)
-    foreach ($locale in ($locales | Where-Object { $_ -match '^[a-zA-Z0-9_-]+$' } | Select-Object -Unique)) {
-        $file = Join-Path $Directory "_locales\$locale\messages.json"
-        if ([IO.File]::Exists($file)) {
-            $messages = [IO.File]::ReadAllText($file) | ConvertFrom-Json
-            $name = $messages.PSObject.Properties[$key].Value.message
-            if ($name) { return $name }
-        }
-    }
-    return [IO.Path]::GetFileName($Directory)
-}
-
 function Initialize-BrowserAutomation {
     Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
     if ('ExtensionManager.NativeWindow' -as [type]) { return }
@@ -41,7 +21,7 @@ function Get-BrowserWindows($Browser) {
         [Windows.Automation.AutomationElement]::ClassNameProperty, 'Chrome_WidgetWin_1'
     )
     [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, $condition) |
-        Where-Object { $_.Current.ProcessId -in $processIds -and -not $_.Current.IsOffscreen }
+        Where-Object { $_.Current.ProcessId -in $processIds }
 }
 
 function Find-Control($Root, $Type) {
@@ -76,48 +56,64 @@ function Open-ManagementMenuPage($Window) {
     return $false
 }
 
+function Close-ExtensionWindow($Window) {
+    if ($Window) {
+        try { $Window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close() } catch { }
+    }
+}
+
 function Open-ExtensionPage($Browser) {
     Initialize-BrowserAutomation
     $previous = @(Get-BrowserWindows $Browser | ForEach-Object { $_.Current.NativeWindowHandle })
-    Start-Process -FilePath $Browser.Exe -ArgumentList @('--new-window', 'about:blank')
-    $deadline = [DateTime]::UtcNow.AddSeconds(6)
-    do {
-        Start-Sleep -Milliseconds 150
-        $window = Get-BrowserWindows $Browser | Where-Object { $_.Current.NativeWindowHandle -notin $previous } | Select-Object -First 1
-        if ($window) {
+    $arguments = @('--new-window', 'about:blank')
+    if ($Browser.Profile) { $arguments = @("--profile-directory=`"$($Browser.Profile)`"") + $arguments }
+    $null = Start-Process -FilePath $Browser.Exe -ArgumentList $arguments
+    $deadline = [DateTime]::UtcNow.AddSeconds(9)
+    try {
+        do {
+            Start-Sleep -Milliseconds 160
+            $candidates = @(Get-BrowserWindows $Browser | Where-Object {
+                $_.Current.NativeWindowHandle -notin $previous -and -not $_.Current.IsOffscreen
+            })
+            if ($candidates.Count -ne 1) { continue }
+            $window = $candidates[0]
             $address = Find-Control $window ([Windows.Automation.ControlType]::Edit) | Where-Object {
                 $_.Current.AutomationId -eq 'view_1017' -or $_.Current.Name -match '地址和搜索栏|地址栏|^Address and search bar$|^Search or enter address$'
             } | Select-Object -First 1
             if ($address) { break }
-        }
-    } until ([DateTime]::UtcNow -ge $deadline)
-    if (-not $address) { throw "没有找到 $($Browser.Name) 地址栏，请打开 $($Browser.Address)。" }
+        } until ([DateTime]::UtcNow -ge $deadline)
+        if (-not $address) { throw "无法打开 $($Browser.Name) 的扩展管理页。" }
 
-    if (-not (Open-ManagementMenuPage $window)) {
-        $handle = [IntPtr]$window.Current.NativeWindowHandle
-        $shell = New-Object -ComObject WScript.Shell
-        $null = $shell.AppActivate($window.Current.ProcessId)
-        $null = [ExtensionManager.NativeWindow]::SetForegroundWindow($handle)
-        $address.SetFocus()
-        if ([ExtensionManager.NativeWindow]::GetForegroundWindow() -ne $handle) {
-            throw "$($Browser.Name) 窗口没有获得焦点，请打开 $($Browser.Address)。"
+        if (-not (Open-ManagementMenuPage $window)) {
+            $handle = [IntPtr]$window.Current.NativeWindowHandle
+            $shell = New-Object -ComObject WScript.Shell
+            $null = $shell.AppActivate($window.Current.ProcessId)
+            $null = [ExtensionManager.NativeWindow]::SetForegroundWindow($handle)
+            $address.SetFocus()
+            if ([ExtensionManager.NativeWindow]::GetForegroundWindow() -ne $handle) {
+                throw "$($Browser.Name) 的临时窗口未能获得焦点。"
+            }
+            $address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Browser.Address)
+            $shell.SendKeys('{ENTER}')
         }
-        $address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Browser.Address)
-        $shell.SendKeys('{ENTER}')
+
+        $page = @{ Window = $window; Address = $address; BaseAddress = $Browser.Address }
+        $deadline = [DateTime]::UtcNow.AddSeconds(8)
+        do {
+            Start-Sleep -Milliseconds 130
+            $document = Find-Control $window ([Windows.Automation.ControlType]::Document) | Where-Object {
+                $_.Current.Name -match '扩展|Extensions'
+            } | Select-Object -First 1
+            if ($document -and (Get-PageAddress $page).TrimEnd('/') -eq $Browser.Address) {
+                $page.Document = $document
+                return $page
+            }
+        } until ([DateTime]::UtcNow -ge $deadline)
+        throw "$($Browser.Name) 的扩展管理页加载超时。"
+    } catch {
+        Close-ExtensionWindow $window
+        throw
     }
-
-    $deadline = [DateTime]::UtcNow.AddSeconds(4)
-    do {
-        Start-Sleep -Milliseconds 130
-        $document = Find-Control $window ([Windows.Automation.ControlType]::Document) | Where-Object {
-            $_.Current.Name -match '扩展|Extensions'
-        } | Select-Object -First 1
-        $location = $address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
-        if ($document -and $location.TrimEnd('/') -eq $Browser.Address) {
-            return @{ Window = $window; Document = $document; Address = $address; BaseAddress = $Browser.Address }
-        }
-    } until ([DateTime]::UtcNow -ge $deadline)
-    throw "$($Browser.Name) 尚未到达扩展页，请打开 $($Browser.Address)。"
 }
 
 function Open-BrowserInstall($Targets) {
@@ -137,27 +133,11 @@ function Open-BrowserInstall($Targets) {
     }
 }
 
-function Get-ExtensionId($Entry) {
-    if ($Entry.id) { return $Entry.id }
-    $manifest = Read-ExtensionManifest $Entry.path
-    if ($manifest.key) {
-        $bytes = [Convert]::FromBase64String($manifest.key)
-    } else {
-        $path = $Entry.path
-        if ($path -match '^[a-z]:') { $path = $path.Substring(0, 1).ToUpperInvariant() + $path.Substring(1) }
-        $bytes = [Text.Encoding]::Unicode.GetBytes($path)
-    }
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { $hex = [BitConverter]::ToString($sha.ComputeHash($bytes), 0, 16).Replace('-', '') }
-    finally { $sha.Dispose() }
-    return -join ($hex.ToCharArray() | ForEach-Object { [char](97 + [Convert]::ToInt32([string]$_, 16)) })
-}
-
 function Find-ReloadButton($Document, $ExtensionId, $Name) {
     $walker = [Windows.Automation.TreeWalker]::RawViewWalker
     $nameMatches = @()
     $buttons = Find-Control $Document ([Windows.Automation.ControlType]::Button) | Where-Object {
-        $_.Current.Name -match '^(Reload|重新加载|重新载入|重载)$'
+        $_.Current.Name -match '^(Reload( extension)?|重新加载(扩展程序)?|重新载入|重载)$'
     }
     foreach ($button in $buttons) {
         $card = $walker.GetParent($button)
@@ -221,67 +201,80 @@ function Return-ToExtensionList($Page) {
             return
         }
     } until ([DateTime]::UtcNow -ge $deadline)
-    throw '浏览器还在插件详情中。请返回扩展列表后重试。'
+    throw '扩展列表加载超时。'
+}
+
+function Test-ExtensionVersion($Container, $Version) {
+    $expected = [regex]::Escape($Version)
+    $texts = Find-Control $Container ([Windows.Automation.ControlType]::Text) | ForEach-Object {
+        $_.Current.Name -replace '\s',''
+    }
+    return [bool]($texts -match "^(?:(?:Version|版本)[:：]?)?$expected$")
 }
 
 function Update-BrowserExtension($Page, $Entry) {
-    $manifest = Read-ExtensionManifest $Entry.path
-    $name = Get-ExtensionDisplayName $Entry.path $manifest
-    $id = Get-ExtensionId $Entry
-    $match = Find-ReloadButton $Page.Document $id $name
-    if (-not $match) {
-        Start-Sleep -Milliseconds 400
-        $match = Find-ReloadButton $Page.Document $id $name
-    }
-    if (-not $match) { return $false }
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        Update-PageDocument $Page
+        $match = Find-ReloadButton $Page.Document $Entry.ID $Entry.Name
+        if ($match) { break }
+        Start-Sleep -Milliseconds 150
+    } until ([DateTime]::UtcNow -ge $deadline)
+    if (-not $match) { throw '浏览器未提供此插件的重载按钮。' }
+
     if (-not $match.Verified) {
-        $exact = Open-CardDetails $Page $match.Card $id
+        $exact = Open-CardDetails $Page $match.Card $Entry.ID
         Return-ToExtensionList $Page
-        if (-not $exact) { return $false }
-        $match = Find-ReloadButton $Page.Document $id $name
-        if (-not $match) { return $false }
+        if (-not $exact) { throw '浏览器中的插件身份无法确认。' }
+        $match = Find-ReloadButton $Page.Document $Entry.ID $Entry.Name
+        if (-not $match) { throw '浏览器未提供此插件的重载按钮。' }
     }
     $match.Button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-    Start-Sleep -Milliseconds 450
-    $reloaded = Find-ReloadButton $Page.Document $id $name
-    if (-not $reloaded) { return $false }
-    $confirmed = $false
-    if (Open-CardDetails $Page $reloaded.Card $id) {
-        $version = [regex]::Escape([string]$manifest.version)
-        $deadline = [DateTime]::UtcNow.AddSeconds(2)
-        do {
-            $texts = @(Find-Control $Page.Window ([Windows.Automation.ControlType]::Text) | ForEach-Object {
-                $_.Current.Name -replace '\s',''
-            })
-            if ($texts -match "^(?:(?:Version|版本)[:：]?)?$version$") {
-                $confirmed = $true
-                break
-            }
-            Start-Sleep -Milliseconds 130
-        } until ([DateTime]::UtcNow -ge $deadline)
+    Start-Sleep -Milliseconds 350
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(6)
+    do {
+        try {
+            Update-PageDocument $Page
+            $errors = Find-Control $Page.Document ([Windows.Automation.ControlType]::Text) | Where-Object {
+                $_.Current.Name -match '^(Failed to load extension|Error loading extension|加载扩展程序失败|无法加载扩展程序|重新加载失败)$'
+            } | Select-Object -First 1
+            if ($errors) { throw '浏览器报告插件加载失败，请检查更新包。' }
+            $reloaded = Find-ReloadButton $Page.Document $Entry.ID $Entry.Name
+            if ($reloaded -and $reloaded.Verified -and (Test-ExtensionVersion $reloaded.Card $Entry.Version)) { return }
+        } catch [Windows.Automation.ElementNotAvailableException] { }
+        Start-Sleep -Milliseconds 160
+    } until ([DateTime]::UtcNow -ge $deadline)
+
+    if ($reloaded -and (Open-CardDetails $Page $reloaded.Card $Entry.ID)) {
+        Update-PageDocument $Page
+        $confirmed = Test-ExtensionVersion $Page.Document $Entry.Version
+        Return-ToExtensionList $Page
+        if ($confirmed) { return }
+    } else {
+        Return-ToExtensionList $Page
     }
-    Return-ToExtensionList $Page
-    return $confirmed
+    throw "浏览器尚未确认版本 $($Entry.Version)。"
 }
 
-function Invoke-BrowserReload($Targets, $Items) {
+function Invoke-BrowserReload($Targets) {
     foreach ($browser in $Targets) {
+        $page = $null
         try {
             $page = Open-ExtensionPage $browser
-            $complete = $true
-            foreach ($entry in $Items) {
-                $name = Get-ExtensionDisplayName $entry.path (Read-ExtensionManifest $entry.path)
-                $applied = $false
-                try { $applied = Update-BrowserExtension $page $entry } catch { }
-                if ($applied) {
-                    "$($browser.Name) · 已重载 $name"
-                } else {
-                    $complete = $false
-                    "$($browser.Name) · 请确认 $name 已加载，并在扩展卡片上点「重新加载」。"
+            foreach ($entry in $browser.Extensions) {
+                try {
+                    Update-BrowserExtension $page $entry
+                    "$($browser.Name) · 已重载 $($entry.Name) $($entry.Version)"
+                } catch {
+                    "$($browser.Name) · $($entry.Name) 重载未完成。$($_.Exception.Message)"
                 }
             }
-            if ($complete) { $page.Window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).Close() }
-        } catch { "$($browser.Name) · $($_.Exception.Message)" }
+        } catch {
+            "$($browser.Name) · 重载未完成。$($_.Exception.Message) 可在管理器里点「重载所选」重试。"
+        } finally {
+            Close-ExtensionWindow $page.Window
+        }
     }
 }
 
@@ -289,5 +282,5 @@ $request = [IO.File]::ReadAllText($InputPath) | ConvertFrom-Json
 if ($request.Install) {
     Open-BrowserInstall $request.Targets
 } else {
-    Invoke-BrowserReload $request.Targets $request.Items
+    Invoke-BrowserReload $request.Targets
 }
