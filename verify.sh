@@ -15,4 +15,5 @@ trap 'rm -rf "$tmp"' EXIT
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags production -ldflags '-H windowsgui' -o "$tmp/extension-manager.exe" .
 for target in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64; do
   GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build -trimpath -o "$tmp/config-cli" ./cmd/extension-manager-cli
+  GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build ./internal/selfupdate
 done

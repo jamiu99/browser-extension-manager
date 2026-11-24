@@ -24,6 +24,8 @@ Windows 版会读取先前 Harness 管理器保存的插件目录和更新源。
 
 [更新源格式和 AI 提示词](docs/update-feed.md) 也可以在应用里直接复制。
 
+右上角「软件更新」可检查 GitHub Releases，下载验证后安装并重启管理器。详见 [软件更新](docs/software-updates.md)。
+
 ## 开发与发版
 
 Go 版本见 [.go-version](.go-version)。Wails 版本由 [go.mod](go.mod) 固定。前端使用原生 HTML、CSS 和 JavaScript，Go 负责本机配置、扩展包和浏览器操作。桌面窗口使用各平台的系统 WebView。

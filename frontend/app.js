@@ -56,7 +56,7 @@ function draw() {
       '</small><span class="badge ' + esc(status) + '" title="' + esc(result?.error || "") + '">' + label + "</span></div>";
   }).join("") : '<div class="empty">' + (term ? "没有匹配的插件。" : "点击「添加插件」选取目录或更新源。") + "</div>";
   drawDetail();
-  const controls = ["check", "import", "all", "add", "browser-settings"];
+  const controls = ["check", "import", "all", "add", "browser-settings", "software-update"];
   controls.forEach((id) => { $(id).disabled = state.busy; });
   $("check").disabled ||= !items.some((item) => item.sourceKind === "manifest");
   $("all").disabled ||= !items.some((item) => item.source && item.version);
