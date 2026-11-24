@@ -1,0 +1,11 @@
+请帮我配置浏览器插件管理器的 Edge、Chrome 或 Chromium 路径。管理器可以在 Windows、macOS 和 Linux 上读取浏览器配置。先用以下只读命令识别当前系统和本机路径，读取返回的 JSON。
+
+{{command}} browser list
+
+关注各浏览器的 detected、effective、profiles 和 problem。已有有效识别时直接告诉我结果。需要覆盖时，请在本机查找真实存在的浏览器程序和用户数据目录，先验证候选值，再问我是否保存。用户数据目录是 Default 或 Profile 1 等资料文件夹的上级目录。只有我明确指定账号资料时才使用 --profile。以下命令用实际浏览器 ID 和路径替换示例。
+
+{{command}} browser check edge --exe "实际浏览器程序路径" --data-dir "实际用户数据目录"
+
+确认后用同样参数把 browser check 换成 browser set，再用 browser check edge 复查已保存配置。set 会替换这个浏览器的所有覆盖项，省略的字段恢复自动检测。需要撤销手动设置时用 browser reset edge。
+
+保持操作限于管理器设置。请使用目标系统上的管理器可执行文件。从 WSL 管理 Windows 浏览器时，调用 Windows 版 extension-manager-cli.exe，并传 Windows 路径。查找时仅使用浏览器的可执行文件、目录和资料名称，避免读取浏览历史、登录数据和会话。

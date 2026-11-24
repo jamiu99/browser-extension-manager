@@ -47,12 +47,12 @@ type manifest struct {
 type Store struct {
 	Dir      string
 	Legacy   string
-	Browsers []Browser
+	Browsers func() []Browser
 	Client   *http.Client
 	mu       sync.Mutex
 }
 
-func New(dir, legacy string, browsers []Browser) *Store {
+func New(dir, legacy string, browsers func() []Browser) *Store {
 	return &Store{Dir: dir, Legacy: legacy, Browsers: browsers, Client: &http.Client{Timeout: 45 * time.Second}}
 }
 
@@ -155,14 +155,19 @@ func (s *Store) readEntries() ([]Entry, error) {
 }
 
 func (s *Store) writeEntries(entries []Entry) error {
-	if err := os.MkdirAll(s.Dir, 0700); err != nil {
+	return writeJSON(filepath.Join(s.Dir, "extensions.json"), entries)
+}
+
+func writeJSON(path string, value any) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(entries, "", "  ")
+	b, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(s.Dir, ".catalog-")
+	f, err := os.CreateTemp(dir, ".settings-")
 	if err != nil {
 		return err
 	}
@@ -174,7 +179,7 @@ func (s *Store) writeEntries(entries []Entry) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), filepath.Join(s.Dir, "extensions.json"))
+	return os.Rename(f.Name(), path)
 }
 
 func (s *Store) list(only bool) ([]Extension, error) {
@@ -182,7 +187,10 @@ func (s *Store) list(only bool) ([]Extension, error) {
 	if err != nil {
 		return nil, err
 	}
-	loaded := scanBrowsers(s.Browsers)
+	var loaded []loadedExtension
+	if s.Browsers != nil {
+		loaded = scanBrowsers(s.Browsers())
+	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		seen[pathKey(entry.Path)] = true

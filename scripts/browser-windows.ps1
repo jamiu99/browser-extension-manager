@@ -65,8 +65,9 @@ function Close-ExtensionWindow($Window) {
 function Open-ExtensionPage($Browser) {
     Initialize-BrowserAutomation
     $previous = @(Get-BrowserWindows $Browser | ForEach-Object { $_.Current.NativeWindowHandle })
-    $arguments = @('--new-window', 'about:blank')
-    if ($Browser.Profile) { $arguments = @("--profile-directory=`"$($Browser.Profile)`"") + $arguments }
+    $arguments = @($Browser.Options | Where-Object { $_ } | ForEach-Object {
+        '"' + ($_ -replace '(\\+)$', '$1$1') + '"'
+    }) + @('--new-window', 'about:blank')
     $null = Start-Process -FilePath $Browser.Exe -ArgumentList $arguments
     $deadline = [DateTime]::UtcNow.AddSeconds(9)
     try {

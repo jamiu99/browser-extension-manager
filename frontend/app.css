@@ -89,3 +89,14 @@ form > p:first-of-type { margin-bottom: 14px; }
   .columns, .item { grid-template-columns: minmax(0, 1fr) 68px; }
   .columns span:nth-child(2), .item .loaded { display: none; }
 }
+.settings-browser { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; }
+#browser-settings-dialog select {
+  font: inherit; color: inherit; background: var(--subtle); border: 1px solid var(--line);
+  border-radius: 8px; min-height: 36px; padding: 5px 9px;
+}
+#setting-status { color: var(--muted); font-size: 12px; }
+#setting-status.attention { color: #973536; }
+#setting-profile { display: block; margin-top: 5px; width: 100%; }
+.settings-hint, .settings-feedback { font-size: 12px; }
+.settings-hint { margin: 0 0 13px; }
+.settings-feedback { min-height: 19px; margin-top: 10px; }

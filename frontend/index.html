@@ -7,6 +7,7 @@
   <title>浏览器插件管理器</title>
   <link rel="stylesheet" href="app.css">
   <script src="app.js" defer></script>
+  <script src="browser-settings.js" defer></script>
 </head>
 <body>
   <header class="top">
@@ -15,6 +16,7 @@
       <div><h1>插件库</h1><p id="count">正在读取插件</p></div>
     </div>
     <nav aria-label="插件库操作">
+      <button id="browser-settings" class="quiet">浏览器设置</button>
       <button id="import" class="quiet">导入已安装</button>
       <button id="guide" class="quiet">更新源指南</button>
       <button id="check">检查更新</button>
@@ -50,6 +52,31 @@
     <header class="dialog-title"><h2>更新源指南</h2><button type="button" class="close" data-close="guide-dialog" aria-label="关闭">×</button></header>
     <div id="guide-content"></div>
     <div class="dialog-buttons"><button id="copy-guide">复制完整指南</button><button class="primary" id="copy-prompt">复制 AI 提示词</button></div>
+  </dialog>
+  <dialog id="browser-settings-dialog">
+    <form id="browser-settings-form">
+      <header class="dialog-title"><h2>浏览器设置</h2><button type="button" class="close" data-close="browser-settings-dialog" aria-label="关闭">×</button></header>
+      <div class="settings-browser">
+        <label for="setting-browser">浏览器</label>
+        <select id="setting-browser"></select>
+        <span id="setting-status" role="status"></span>
+      </div>
+      <label for="setting-executable">浏览器程序</label>
+      <div class="field"><input id="setting-executable" autocomplete="off" spellcheck="false"><button type="button" id="pick-executable">选择文件</button></div>
+      <label for="setting-data">用户数据目录</label>
+      <div class="field"><input id="setting-data" autocomplete="off" spellcheck="false"><button type="button" id="pick-data">选择目录</button></div>
+      <p class="settings-hint">填写 Default、Profile 1 等资料文件夹的上级目录。路径留空时使用本机自动检测结果。</p>
+      <label for="setting-profile">使用哪个用户资料</label>
+      <select id="setting-profile"></select>
+      <p id="setting-feedback" class="settings-feedback" role="status"></p>
+      <div class="dialog-buttons">
+        <button type="button" id="copy-browser-prompt" class="quiet">复制 AI 配置指令</button>
+        <button type="button" id="browser-redetect" class="quiet">重新检测</button>
+        <button type="button" id="browser-reset" class="quiet">恢复自动</button>
+        <button type="button" id="browser-check">验证路径</button>
+        <button type="submit" id="browser-save" class="primary">保存设置</button>
+      </div>
+    </form>
   </dialog>
 </body>
 </html>

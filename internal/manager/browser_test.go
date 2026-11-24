@@ -38,7 +38,7 @@ func TestCatalogKeepsUnpackedExtensionIdentityPerProfile(t *testing.T) {
 			}
 		}
 	}
-	store := New(filepath.Join(root, "catalog"), "", []Browser{edge, chrome})
+	store := New(filepath.Join(root, "catalog"), "", func() []Browser { return []Browser{edge, chrome} })
 	items, err := store.List(false)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("catalog: %+v, %v", items, err)
