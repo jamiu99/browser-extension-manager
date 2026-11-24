@@ -1,8 +1,6 @@
-首个跨平台桌面版，提供 Windows x64、macOS 通用包和 Linux x64。
+- Windows 可以从管理器直接将插件安装到 Edge 或 Chrome。管理器会自动确认目录，并核对加载结果。更新后可以在管理器里重载插件。
+- 新下载的插件可以统一存放到自定义目录。已有插件可以编辑目录和更新源，也可以从插件库移除。移除时保留本地文件和浏览器里的安装。
+- Windows、macOS 和 Linux 可以自动检测浏览器，也可以手动配置程序、用户数据目录和用户资料。发布包提供给 AI Agent 使用的配置指令和 CLI。
+- 「软件更新」可以从 GitHub 检查新版本，下载并校验对应平台的包，然后更新并重启。已在使用 `v0.2.0` 开发预览版的用户可在应用内升级到本正式版。
 
-- 导入已通过目录加载的 Edge、Chrome、Chromium 插件，从本地 ZIP 或 HTTPS 版本清单安装和更新。
-- Windows 使用独立图形 EXE 和应用图标，沿用旧版插件配置。安装和重载使用浏览器扩展页。
-- macOS 和 Linux 通过系统 WebView 显示管理界面。重载在浏览器扩展卡片上确认。
-- 应用内附更新源指南和可复制的 AI 提示词。
-
-先解压再打开。运行环境见 [下载说明](https://github.com/jamiu99/browser-extension-manager#下载)。校验值见 SHA256SUMS.txt。
+提供 Windows x64、macOS 通用包和 Linux x64。首次安装请先解压再打开。macOS 和 Linux 的插件安装和重载需要在浏览器里确认。运行环境见 [下载说明](https://github.com/jamiu99/browser-extension-manager#下载)。下载校验值见 `SHA256SUMS.txt`。
