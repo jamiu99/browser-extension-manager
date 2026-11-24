@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	goruntime "runtime"
+	"slices"
 	"strings"
 
+	"github.com/jamiu99/browser-extension-manager/internal/cli"
 	"github.com/jamiu99/browser-extension-manager/internal/manager"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -33,8 +35,9 @@ var commit = ""
 var builtAt = ""
 
 type App struct {
-	ctx   context.Context
-	store *manager.Store
+	ctx      context.Context
+	store    *manager.Store
+	browsers manager.BrowserSettings
 }
 
 type Catalog struct {
@@ -48,7 +51,7 @@ type Catalog struct {
 
 func (a *App) Catalog(importInstalled bool) (Catalog, error) {
 	items, err := a.store.List(importInstalled)
-	return Catalog{items, a.store.Browsers, version, commit, builtAt, goruntime.GOOS == "windows"}, err
+	return Catalog{items, a.browsers.Available(), version, commit, builtAt, goruntime.GOOS == "windows"}, err
 }
 
 func (a *App) Save(folder, source, kind string) (manager.Entry, error) {
@@ -75,6 +78,32 @@ func (a *App) Copy(value string) error {
 
 func (a *App) Guide() string { return updateGuide }
 
+func (a *App) BrowserSettings() manager.BrowserReport { return a.browsers.Report() }
+
+func (a *App) CheckBrowser(id string, config manager.BrowserConfig) (manager.BrowserStatus, error) {
+	return a.browsers.Inspect(id, config)
+}
+
+func (a *App) SaveBrowser(id string, config manager.BrowserConfig) (manager.BrowserStatus, error) {
+	return a.browsers.Save(id, config)
+}
+
+func (a *App) PickBrowserPath(kind string) (string, error) {
+	if kind == "data" {
+		return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "选择浏览器用户数据目录"})
+	}
+	options := runtime.OpenDialogOptions{Title: "选择浏览器程序"}
+	if goruntime.GOOS == "windows" {
+		options.Filters = []runtime.FileFilter{{DisplayName: "应用程序", Pattern: "*.exe"}}
+	}
+	return runtime.OpenFileDialog(a.ctx, options)
+}
+
+func (a *App) BrowserPrompt() string {
+	exe, _ := os.Executable()
+	return cli.BrowserPrompt(exe)
+}
+
 func (a *App) Activate(ids, paths []string, install bool) ([]string, error) {
 	items, err := a.store.List(false)
 	if err != nil {
@@ -98,7 +127,7 @@ func (a *App) Activate(ids, paths []string, install bool) ([]string, error) {
 		}
 	}
 	var targets []manager.Browser
-	for _, browser := range a.store.Browsers {
+	for _, browser := range a.browsers.Available() {
 		for _, id := range ids {
 			if browser.ID == id {
 				targets = append(targets, browser)
@@ -114,16 +143,40 @@ func (a *App) Activate(ids, paths []string, install bool) ([]string, error) {
 	}
 	var messages []string
 	for _, browser := range targets {
-		cmd := exec.Command(browser.Exe, browser.Page)
-		if err := cmd.Start(); err != nil {
-			messages = append(messages, browser.Name+" · 打开失败，请在浏览器中输入 "+browser.Page)
-			continue
+		profiles := []string{browser.Instance}
+		if !install {
+			profiles = nil
+			for _, item := range selected {
+				loaded := false
+				for _, load := range item.Loads {
+					if load.Browser == browser.ID {
+						loaded = true
+						if !slices.Contains(profiles, load.Profile) {
+							profiles = append(profiles, load.Profile)
+						}
+					}
+				}
+				if !loaded {
+					messages = append(messages, browser.Name+" · "+item.Name+"尚未加载，可以从管理器安装。")
+				}
+			}
 		}
-		_ = cmd.Process.Release()
-		if install {
-			messages = append(messages, browser.Name+" · 打开开发者模式，选择「加载已解压的扩展」，粘贴已复制的目录")
-		} else {
-			messages = append(messages, browser.Name+" · 在扩展卡片上点击「重新加载」以生效")
+		for _, profile := range profiles {
+			name := browser.Name
+			if profile != "" {
+				name += " · " + profile
+			}
+			cmd := exec.Command(browser.Exe, append(browser.LaunchOptions(profile), browser.Page)...)
+			if err := cmd.Start(); err != nil {
+				messages = append(messages, name+" · 打开失败，请在浏览器中输入 "+browser.Page)
+				continue
+			}
+			_ = cmd.Process.Release()
+			if install {
+				messages = append(messages, name+" · 打开开发者模式，选择「加载已解压的扩展」，粘贴已复制的目录")
+			} else {
+				messages = append(messages, name+" · 在扩展卡片上点击「重新加载」以生效")
+			}
 		}
 	}
 	return messages, nil
@@ -153,7 +206,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	app := &App{store: manager.New(dir, legacy, manager.Browsers())}
+	browsers := manager.BrowserSettings{Dir: dir}
+	app := &App{store: manager.New(dir, legacy, browsers.Available), browsers: browsers}
 	if len(os.Args) > 1 {
 		name := os.Args[1]
 		switch {
@@ -164,6 +218,11 @@ func main() {
 				log.Fatal(err)
 			}
 			fmt.Println("已登记。回到管理器刷新列表并检查更新。")
+		case name == "browser" || name == "--help" || name == "-h":
+			if err := cli.Run(browsers, os.Args[1:], os.Stdout, os.Stderr); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		default:
 			log.Fatal("用法：extension-manager [--version | --set-source <插件名称或目录> <HTTPS 清单地址>]")
 		}

@@ -34,7 +34,7 @@ try {
 Write-Output 'Verified Windows GUI subsystem and application icon group.'
 $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Archive).Path)
 try {
-    foreach ($name in 'extension-manager.exe', 'release.json', 'update-feed.md', 'THIRD-PARTY-NOTICES.txt') {
+    foreach ($name in 'extension-manager.exe', 'extension-manager-cli.exe', 'release.json', 'update-feed.md', 'browser-configuration.md', 'THIRD-PARTY-NOTICES.txt') {
         if (-not $zip.GetEntry($name)) { throw "Missing $name in Windows ZIP" }
     }
 } finally {

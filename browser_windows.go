@@ -21,15 +21,16 @@ var automationScript []byte
 func windowsAutomation(browsers []manager.Browser, items []manager.Extension, install bool) []string {
 	type extension struct{ Name, ID, Version string }
 	type target struct {
-		Name, Exe, Address, Profile string
-		Extensions                  []extension
+		Name, Exe, Address string
+		Options            []string
+		Extensions         []extension
 	}
 	var targets []target
 	var messages []string
 	operations := 0
 	for _, b := range browsers {
 		if install {
-			targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page})
+			targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page, Options: b.LaunchOptions(b.Instance)})
 			continue
 		}
 		profiles := make(map[string]int)
@@ -44,7 +45,7 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 				if !exists {
 					index = len(targets)
 					profiles[load.Profile] = index
-					targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page, Profile: load.Profile})
+					targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page, Options: b.LaunchOptions(load.Profile)})
 				}
 				targets[index].Extensions = append(targets[index].Extensions, extension{item.Name, load.ID, item.Version})
 				operations++

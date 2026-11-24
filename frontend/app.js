@@ -56,7 +56,7 @@ function draw() {
       '</small><span class="badge ' + esc(status) + '" title="' + esc(result?.error || "") + '">' + label + "</span></div>";
   }).join("") : '<div class="empty">' + (term ? "没有匹配的插件。" : "点击「添加插件」选取目录或更新源。") + "</div>";
   drawDetail();
-  const controls = ["check", "import", "all", "add"];
+  const controls = ["check", "import", "all", "add", "browser-settings"];
   controls.forEach((id) => { $(id).disabled = state.busy; });
   $("check").disabled ||= !items.some((item) => item.sourceKind === "manifest");
   $("all").disabled ||= !items.some((item) => item.source && item.version);
@@ -71,7 +71,8 @@ function drawDetail() {
   const result = state.results.get(item.path);
   const browserOptions = state.browsers.map((browser) =>
     '<label class="choice"><input type="checkbox" data-browser="' + esc(browser.id) + '"' +
-    (state.targets.has(browser.id) ? " checked" : "") + ">" + esc(browser.name) + "</label>").join("");
+    (state.targets.has(browser.id) ? " checked" : "") + ">" +
+    esc(browser.instance ? browser.name + " · " + browser.instance : browser.name) + "</label>").join("");
   const operation = (id, label, kind, disabled = false) =>
     '<button id="' + id + '" class="' + kind + '"' + (state.busy || disabled ? " disabled" : "") + ">" + label + "</button>";
   const picks = selected();
@@ -80,7 +81,7 @@ function drawDetail() {
     (result?.version && result.state !== "updated" ? "<p>发布版本 " + esc(result.version) + "</p>" : "") +
     "<dl><dt>更新来源</dt><dd>" + esc(item.source || "尚未设置") + "</dd>" +
     "<dt>安装目录</dt><dd>" + esc(item.path) + "</dd></dl><h3>目标浏览器</h3>" +
-    '<div class="browsers">' + (browserOptions || "<p>未检测到 Edge、Chrome 或 Chromium。</p>") + "</div>" +
+    '<div class="browsers">' + (browserOptions || '<p>请在「浏览器设置」中确认浏览器路径。</p>') + "</div>" +
     '<div class="actions">' +
     operation("update", "更新所选" + (picks.length > 1 ? "（" + picks.length + "）" : ""), "primary", !picks.some((pick) => pick.source)) +
     operation("install", "安装到浏览器", "", !item.version || state.targets.size === 0) + "<div>" +
@@ -94,6 +95,9 @@ async function load(importInstalled = false) {
   const firstLoad = state.browsers.length === 0;
   state.items = catalog.extensions ?? [];
   state.browsers = catalog.browsers ?? [];
+  for (const target of state.targets) {
+    if (!state.browsers.some((browser) => browser.id === target)) state.targets.delete(target);
+  }
   state.version = catalog.version;
   state.automaticReload = catalog.automaticReload;
   if (firstLoad && state.browsers.length) {
