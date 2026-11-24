@@ -22,6 +22,7 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 	type extension struct{ Name, ID, Version string }
 	type target struct {
 		Name, Exe, Address string
+		PluginPath         string
 		Options            []string
 		Extensions         []extension
 	}
@@ -30,7 +31,12 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 	operations := 0
 	for _, b := range browsers {
 		if install {
-			targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page, Options: b.LaunchOptions(b.Instance)})
+			item := items[0]
+			if b.HasLoaded(item.Path) {
+				messages = append(messages, b.Name+" · 已加载 "+item.Name)
+				continue
+			}
+			targets = append(targets, target{Name: b.Name, Exe: b.Exe, Address: b.Page, PluginPath: item.Path, Options: b.LaunchOptions(b.Instance)})
 			continue
 		}
 		profiles := make(map[string]int)
@@ -60,7 +66,7 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 	}
 	failure := func() []string {
 		if install {
-			return nil
+			return append(messages, "浏览器安装未完成，请在管理器里重试。")
 		}
 		return append(messages, "浏览器重载未完成，请在管理器里点「重载所选」重试。")
 	}
@@ -81,7 +87,7 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 	if os.WriteFile(script, automationScript, 0600) != nil || os.WriteFile(input, data, 0600) != nil {
 		return failure()
 	}
-	timeout := time.Duration(20+len(targets)*20+operations*12) * time.Second
+	timeout := time.Duration(20+len(targets)*32+operations*12) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	powershell := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
@@ -93,6 +99,30 @@ func windowsAutomation(browsers []manager.Browser, items []manager.Extension, in
 	messages = append(messages, strings.FieldsFunc(stdout.String(), func(r rune) bool { return r == '\r' || r == '\n' })...)
 	if err != nil || stdout.Len() == 0 {
 		return failure()
+	}
+	if install {
+		return verifyBrowserInstall(browsers, items[0], messages)
+	}
+	return messages
+}
+
+func verifyBrowserInstall(browsers []manager.Browser, item manager.Extension, messages []string) []string {
+	for i, message := range messages {
+		for _, browser := range browsers {
+			if message != browser.Name+" · 已提交安装目录。" {
+				continue
+			}
+			messages[i] = browser.Name + " · 已提交安装，暂未读取到浏览器的加载记录。可稍后点「导入已安装」确认。"
+			deadline := time.Now().Add(8 * time.Second)
+			for time.Now().Before(deadline) {
+				if browser.HasLoaded(item.Path) {
+					messages[i] = browser.Name + " · 已安装 " + item.Name
+					break
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+			break
+		}
 	}
 	return messages
 }

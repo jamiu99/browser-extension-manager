@@ -28,6 +28,15 @@ func (b Browser) LaunchOptions(instance string) []string {
 	return args
 }
 
+func (b Browser) HasLoaded(folder string) bool {
+	for _, item := range scanBrowsers([]Browser{b}) {
+		if pathKey(item.Path) == pathKey(folder) {
+			return true
+		}
+	}
+	return false
+}
+
 func profileNames(root string) []string {
 	profiles := []string{}
 	if root == "" {
