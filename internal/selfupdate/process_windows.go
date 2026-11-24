@@ -12,7 +12,9 @@ import (
 )
 
 func detachConsole(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+	// Keep the console detached while allowing the relaunched desktop window
+	// to use its normal visibility on Windows.
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
 func waitForExit(pid int, timeout time.Duration) error {

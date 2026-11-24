@@ -159,8 +159,8 @@ func (s Service) Start(ctx context.Context, current, selected string) error {
 		return fmt.Errorf("此更新包无法在当前系统运行")
 	}
 	worker := filepath.Join(stage, workerName())
-	// The extracted new application is signed on macOS. The updater worker
-	// runs outside the installed bundle so the bundle can be replaced.
+	// The worker runs outside the installed bundle so it can move that bundle
+	// as a unit on macOS.
 	if err := copyExecutable(layout.exe, worker); err != nil {
 		return fmt.Errorf("无法准备更新程序，请重试")
 	}
