@@ -62,6 +62,20 @@ func (a *App) Save(folder, source, kind string) (manager.Entry, error) {
 	return a.store.Save(folder, source, kind)
 }
 
+func (a *App) EditPlugin(original, folder, source, kind string) (manager.Entry, error) {
+	return a.store.Edit(original, folder, source, kind)
+}
+
+func (a *App) RemovePlugin(folder string) error { return a.store.Remove(folder) }
+
+func (a *App) PluginStorage() (manager.StorageSettings, error) { return a.store.Storage() }
+
+func (a *App) SavePluginStorage(folder string) error { return a.store.SaveStorage(folder) }
+
+func (a *App) PickPluginStorage() (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "选择默认插件目录"})
+}
+
 func (a *App) Check(paths []string, apply bool) []manager.Result {
 	return a.store.Check(paths, apply)
 }
@@ -125,11 +139,6 @@ func (a *App) Activate(ids, paths []string, install bool) ([]string, error) {
 	if len(selected) == 0 || (install && len(selected) != 1) {
 		return nil, fmt.Errorf("请选择一个可用插件进行安装，或选择需要重新加载的插件")
 	}
-	if install {
-		if err := a.Copy(selected[0].Path); err != nil {
-			return nil, err
-		}
-	}
 	var targets []manager.Browser
 	for _, browser := range a.browsers.Available() {
 		for _, id := range ids {
@@ -144,6 +153,11 @@ func (a *App) Activate(ids, paths []string, install bool) ([]string, error) {
 	}
 	if messages := windowsAutomation(targets, selected, install); len(messages) > 0 {
 		return messages, nil
+	}
+	if install {
+		if err := a.Copy(selected[0].Path); err != nil {
+			return nil, err
+		}
 	}
 	var messages []string
 	for _, browser := range targets {

@@ -11,6 +11,12 @@ function Initialize-BrowserAutomation {
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(System.IntPtr handle);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern System.IntPtr GetWindow(System.IntPtr handle, uint command);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(System.IntPtr handle);
 '@
 }
 
@@ -117,20 +123,108 @@ function Open-ExtensionPage($Browser) {
     }
 }
 
-function Open-BrowserInstall($Targets) {
-    foreach ($browser in $Targets) {
+function Open-FolderPicker($Page) {
+    $maximized = $false
+    $modeEnabled = $false
+    $deadline = [DateTime]::UtcNow.AddSeconds(6)
+    do {
+        Start-Sleep -Milliseconds 180
         try {
-            $page = Open-ExtensionPage $browser
-            $button = Find-Control $page.Document ([Windows.Automation.ControlType]::Button) | Where-Object {
+            Update-PageDocument $Page
+            if (-not $Page.Document) { continue }
+            $buttons = @(Find-Control $Page.Document ([Windows.Automation.ControlType]::Button))
+            $load = $buttons | Where-Object {
                 $_.Current.Name -match '^Load unpacked$|^加载.*(?:解压|未打包)'
             } | Select-Object -First 1
-            if ($button) {
-                $button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-                "$($browser.Name) · 请粘贴目录并确认选择。"
-            } else {
-                "$($browser.Name) · 在扩展页开启开发人员模式，并加载已解压的插件目录。"
+            $menu = $buttons | Where-Object {
+                $_.Current.Name -match '扩展.*菜单|Extensions.*menu|^主菜单$|^Main menu$'
+            } | Select-Object -First 1
+            $control = $buttons | Where-Object {
+                $_.Current.IsEnabled -and ($_.Current.AutomationId -eq 'dev-switch' -or $_.Current.Name -match '^(开发人员模式|Developer mode)$')
+            } | Select-Object -First 1
+        } catch {
+            # The browser replaces these controls when the developer panel changes.
+            continue
+        }
+        if ($load) {
+            $load.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+            return
+        }
+        if (-not $maximized -and $menu) {
+            $Page.Window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([Windows.Automation.WindowVisualState]::Maximized)
+            $maximized = $true
+            continue
+        }
+        $toggle = $null
+        if (-not $modeEnabled -and $control -and $control.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$toggle) -and
+            $toggle.Current.ToggleState -eq [Windows.Automation.ToggleState]::Off) {
+            $toggle.Toggle()
+            $modeEnabled = $true
+        }
+    } until ([DateTime]::UtcNow -ge $deadline)
+    throw '当前浏览器资料未允许加载解压插件。'
+}
+
+function Select-PluginFolder($Page, $PluginPath) {
+    $window = [IntPtr]$Page.Window.Current.NativeWindowHandle
+    $deadline = [DateTime]::UtcNow.AddSeconds(9)
+    $dialog = $null
+    try {
+        do {
+            $popup = [ExtensionManager.NativeWindow]::GetWindow($window, 6)
+            if ($popup -ne [IntPtr]::Zero -and $popup -ne $window -and
+                [ExtensionManager.NativeWindow]::GetWindow($popup, 4) -eq $window) {
+                $candidate = [Windows.Automation.AutomationElement]::FromHandle($popup)
+                if ($candidate.Current.ClassName -eq '#32770' -and $candidate.Current.Name -match '目录|directory|folder') {
+                    $dialog = $candidate
+                    break
+                }
             }
-        } catch { $_.Exception.Message }
+            Start-Sleep -Milliseconds 160
+        } until ([DateTime]::UtcNow -ge $deadline)
+        if (-not $dialog) { throw '未找到浏览器的插件目录选择窗口。' }
+
+        $name = Find-Control $dialog ([Windows.Automation.ControlType]::Edit) | Where-Object {
+            $_.Current.AutomationId -eq '1152' -or $_.Current.Name -match '^(Folder|Folder name|File name|文件夹|文件夹名|文件名)[:： ]*$'
+        } | Select-Object -First 1
+        $choose = Find-Control $dialog ([Windows.Automation.ControlType]::Button) | Where-Object {
+            $_.Current.AutomationId -eq '1' -or $_.Current.Name -match '^(Select Folder|选择文件夹)$'
+        } | Select-Object -First 1
+        if (-not ($name -and $choose)) { throw '未找到目录输入框或确认按钮。' }
+
+        $value = $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
+        $value.SetValue($PluginPath)
+        if ($value.Current.Value -ne $PluginPath) { throw '浏览器未接受插件目录。' }
+        $handle = [IntPtr]$dialog.Current.NativeWindowHandle
+        $choose.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            Start-Sleep -Milliseconds 170
+            if (-not [ExtensionManager.NativeWindow]::IsWindowVisible($handle)) {
+                $dialog = $null
+                return
+            }
+        } until ([DateTime]::UtcNow -ge $deadline)
+        throw '浏览器未确认插件目录。'
+    } finally {
+        Close-ExtensionWindow $dialog
+    }
+}
+
+function Open-BrowserInstall($Targets) {
+    foreach ($browser in $Targets) {
+        $page = $null
+        try {
+            $page = Open-ExtensionPage $browser
+            Open-FolderPicker $page
+            Select-PluginFolder $page $browser.PluginPath
+            Start-Sleep -Milliseconds 650
+            "$($browser.Name) · 已提交安装目录。"
+        } catch {
+            "$($browser.Name) · 安装未完成。$($_.Exception.Message)"
+        } finally {
+            Close-ExtensionWindow $page.Window
+        }
     }
 }
 

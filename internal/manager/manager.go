@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -24,6 +23,7 @@ type Entry struct {
 	Source     string `json:"source"`
 	SourceKind string `json:"sourceKind,omitempty"`
 	Download   string `json:"download,omitempty"`
+	Removed    bool   `json:"removed,omitempty"`
 }
 
 type Extension struct {
@@ -182,10 +182,10 @@ func writeJSON(path string, value any) error {
 	return os.Rename(f.Name(), path)
 }
 
-func (s *Store) list(only bool) ([]Extension, error) {
+func (s *Store) catalog() ([]Entry, []loadedExtension, error) {
 	entries, err := s.readEntries()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var loaded []loadedExtension
 	if s.Browsers != nil {
@@ -201,6 +201,14 @@ func (s *Store) list(only bool) ([]Extension, error) {
 			seen[pathKey(found.Path)] = true
 		}
 	}
+	return entries, loaded, nil
+}
+
+func (s *Store) list(only bool) ([]Extension, error) {
+	entries, loaded, err := s.catalog()
+	if err != nil {
+		return nil, err
+	}
 	if !only {
 		if err := s.writeEntries(entries); err != nil {
 			return nil, err
@@ -208,6 +216,9 @@ func (s *Store) list(only bool) ([]Extension, error) {
 	}
 	out := make([]Extension, 0, len(entries))
 	for _, entry := range entries {
+		if entry.Removed {
+			continue
+		}
 		m, err := readManifest(entry.Path)
 		ext := Extension{Entry: entry, Name: filepath.Base(entry.Path), Browsers: []string{}}
 		if err == nil {
@@ -254,11 +265,27 @@ func (s *Store) find(folder string) (Entry, error) {
 }
 
 func (s *Store) Save(folder, source, kind string) (Entry, error) {
+	return s.Edit("", folder, source, kind)
+}
+
+func (s *Store) Edit(original, folder, source, kind string) (Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items, err := s.list(true)
+	entries, _, err := s.catalog()
 	if err != nil {
 		return Entry{}, err
+	}
+	var previous Entry
+	if original != "" {
+		for _, candidate := range entries {
+			if !candidate.Removed && pathKey(candidate.Path) == pathKey(original) {
+				previous = candidate
+				break
+			}
+		}
+		if previous.Path == "" {
+			return Entry{}, fmt.Errorf("插件已移除，请刷新列表")
+		}
 	}
 	entry := Entry{Path: strings.TrimSpace(folder), Source: strings.TrimSpace(source), SourceKind: kind}
 	if entry.Source == "" {
@@ -279,39 +306,89 @@ func (s *Store) Save(folder, source, kind string) (Entry, error) {
 			entry.SourceKind = "manifest"
 		}
 	}
-	if entry.SourceKind == "manifest" {
+	if previous.Path != "" && entry.SourceKind == previous.SourceKind && entry.Source == previous.Source {
+		entry.Download = previous.Download
+	}
+	if entry.SourceKind == "manifest" && (previous.Path == "" || entry.Source != previous.Source || entry.SourceKind != previous.SourceKind) {
 		if _, err := s.release(entry); err != nil {
 			return Entry{}, err
 		}
 	}
-	if entry.Path == "" {
+	created := ""
+	saved := false
+	defer func() {
+		if !saved && created != "" {
+			os.RemoveAll(created)
+		}
+	}()
+	switch {
+	case entry.Path == "" && original != "":
+		return Entry{}, fmt.Errorf("请输入新的插件目录")
+	case entry.Path == "":
 		if entry.Source == "" {
-			return Entry{}, fmt.Errorf("choose an update source or a loaded extension folder")
+			return Entry{}, fmt.Errorf("请选择插件目录或填写更新来源")
 		}
-		var suffix [8]byte
-		if _, err := rand.Read(suffix[:]); err != nil {
+		entry.Path, err = s.installNew(entry)
+		if err != nil {
 			return Entry{}, err
 		}
-		entry.Path = filepath.Join(s.Dir, "packages", hex.EncodeToString(suffix[:]))
-		if _, err = s.sync(entry); err != nil {
-			return Entry{}, err
-		}
-	} else {
+		created = entry.Path
+	default:
 		if !filepath.IsAbs(entry.Path) {
-			return Entry{}, fmt.Errorf("choose an absolute extension folder")
+			return Entry{}, fmt.Errorf("请输入插件目录的绝对路径")
 		}
 		entry.Path = filepath.Clean(entry.Path)
-		if _, err = readManifest(entry.Path); err != nil {
+		if original != "" && pathKey(original) != pathKey(entry.Path) {
+			for _, candidate := range entries {
+				if !candidate.Removed && pathKey(candidate.Path) == pathKey(entry.Path) {
+					old, oldErr := readManifest(previous.Path)
+					current, currentErr := readManifest(candidate.Path)
+					if oldErr != nil || currentErr != nil || old.Name != current.Name || old.Key != current.Key ||
+						(candidate.Source != "" && candidate.Source != entry.Source) {
+						return Entry{}, fmt.Errorf("新目录已被另一条插件记录使用，请先检查该记录")
+					}
+					break
+				}
+			}
+			created, err = copyToNewPath(previous.Path, entry.Path)
+			if err != nil {
+				return Entry{}, err
+			}
+		} else if _, err = readManifest(entry.Path); err != nil {
 			return Entry{}, err
 		}
 	}
-	entries := make([]Entry, 0, len(items)+1)
-	for _, item := range items {
-		if pathKey(item.Path) != pathKey(entry.Path) {
-			entries = append(entries, item.Entry)
+
+	result := make([]Entry, 0, len(entries)+1)
+	for _, candidate := range entries {
+		switch {
+		case pathKey(candidate.Path) == pathKey(entry.Path):
+			continue
+		case original != "" && pathKey(candidate.Path) == pathKey(original):
+			result = append(result, Entry{Path: candidate.Path, Removed: true})
+		default:
+			result = append(result, candidate)
 		}
 	}
-	return entry, s.writeEntries(append(entries, entry))
+	err = s.writeEntries(append(result, entry))
+	saved = err == nil
+	return entry, err
+}
+
+func (s *Store) Remove(folder string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, _, err := s.catalog()
+	if err != nil {
+		return err
+	}
+	for i, candidate := range entries {
+		if !candidate.Removed && pathKey(candidate.Path) == pathKey(folder) {
+			entries[i] = Entry{Path: candidate.Path, Removed: true}
+			return s.writeEntries(entries)
+		}
+	}
+	return nil
 }
 
 func (s *Store) ConfigPath() string { return filepath.Join(s.Dir, "extensions.json") }

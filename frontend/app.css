@@ -71,6 +71,7 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2
 .browsers { flex-wrap: wrap; gap: 8px 15px; }
 .empty { padding: 20px 9px; color: var(--muted); }
 footer { justify-content: space-between; gap: 12px; min-height: 51px; padding: 6px 11px; }
+.footer-actions { display: flex; align-items: center; gap: 6px; }
 #activity { padding-left: 4px; color: var(--muted); max-height: 80px; overflow: auto; font-size: 12px; white-space: pre-line; }
 dialog { padding: 20px; border: 1px solid var(--line); border-radius: 16px; color: inherit; background: var(--surface); width: min(600px, calc(100% - 34px)); max-height: calc(100% - 48px); }
 dialog::backdrop { background: #21182f55; }
@@ -104,3 +105,4 @@ form > p:first-of-type { margin-bottom: 14px; }
 .software-versions dt { color: var(--muted); font-size: 12px; }
 .software-versions dd { margin: 3px 0 0; font-weight: 600; }
 #software-feedback { min-height: 20px; }
+button.danger { color: #973536; }

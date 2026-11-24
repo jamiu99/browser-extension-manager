@@ -35,20 +35,38 @@
   </main>
   <footer>
     <div id="activity" role="status" aria-live="polite">正在读取插件</div>
-    <button id="all" type="button">全部更新</button>
+    <div class="footer-actions">
+      <button id="plugin-storage" type="button" class="quiet">默认插件目录</button>
+      <button id="all" type="button">全部更新</button>
+    </div>
   </footer>
   <dialog id="edit">
     <form id="source-form">
       <header class="dialog-title"><h2 id="edit-title">添加插件</h2><button type="button" class="close" data-close="edit" aria-label="关闭">×</button></header>
-      <p>选择已解压的插件目录，或填写 ZIP 和版本清单地址。</p>
+      <p id="edit-help">选择已解压的插件目录，或填写 ZIP 和版本清单地址。</p>
       <label for="path">插件目录</label>
-      <div class="field"><input id="path" placeholder="可留空，由管理器解压"><button id="folder" type="button">选择目录</button></div>
+      <div class="field"><input id="path"><button id="folder" type="button">选择目录</button></div>
       <label for="source">更新来源</label>
       <div class="field"><input id="source" placeholder="HTTPS 版本清单、ZIP 或本地路径"><button id="zip" type="button">选择 ZIP</button></div>
       <label class="choice"><input id="manifest" type="checkbox">来源是 JSON 版本清单</label>
       <p id="edit-error" class="error" role="status"></p>
       <div class="dialog-buttons"><button type="button" data-close="edit">取消</button><button id="save" class="primary" type="submit">保存插件</button></div>
     </form>
+  </dialog>
+  <dialog id="storage-dialog">
+    <form id="storage-form">
+      <header class="dialog-title"><h2>默认插件目录</h2><button type="button" class="close" data-close="storage-dialog" aria-label="关闭">×</button></header>
+      <p>新下载的插件会在此目录下各自建文件夹。留空可恢复应用默认目录。</p>
+      <label for="storage-path">插件存放位置</label>
+      <div class="field"><input id="storage-path" autocomplete="off" spellcheck="false"><button id="pick-storage" type="button">选择目录</button></div>
+      <p id="storage-feedback" role="status"></p>
+      <div class="dialog-buttons"><button id="save-storage" type="submit" class="primary">保存目录</button></div>
+    </form>
+  </dialog>
+  <dialog id="remove-dialog">
+    <header class="dialog-title"><h2>从插件库移除</h2><button type="button" class="close" data-close="remove-dialog" aria-label="关闭">×</button></header>
+    <p id="remove-description"></p>
+    <div class="dialog-buttons"><button type="button" data-close="remove-dialog">取消</button><button type="button" id="confirm-remove" class="danger">移除记录</button></div>
   </dialog>
   <dialog id="guide-dialog">
     <header class="dialog-title"><h2>更新源指南</h2><button type="button" class="close" data-close="guide-dialog" aria-label="关闭">×</button></header>

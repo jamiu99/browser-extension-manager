@@ -56,7 +56,7 @@ function draw() {
       '</small><span class="badge ' + esc(status) + '" title="' + esc(result?.error || "") + '">' + label + "</span></div>";
   }).join("") : '<div class="empty">' + (term ? "没有匹配的插件。" : "点击「添加插件」选取目录或更新源。") + "</div>";
   drawDetail();
-  const controls = ["check", "import", "all", "add", "browser-settings", "software-update"];
+  const controls = ["check", "import", "all", "add", "browser-settings", "software-update", "plugin-storage"];
   controls.forEach((id) => { $(id).disabled = state.busy; });
   $("check").disabled ||= !items.some((item) => item.sourceKind === "manifest");
   $("all").disabled ||= !items.some((item) => item.source && item.version);
@@ -86,8 +86,9 @@ function drawDetail() {
     operation("update", "更新所选" + (picks.length > 1 ? "（" + picks.length + "）" : ""), "primary", !picks.some((pick) => pick.source)) +
     operation("install", "安装到浏览器", "", !item.version || state.targets.size === 0) + "<div>" +
     operation("reload", "重载所选", "quiet", !picks.length || state.targets.size === 0) +
-    operation("edit-source", "修改来源", "quiet", !item.version) +
-    operation("copy-path", "复制目录", "quiet") + "</div></div>";
+    operation("edit-plugin", "编辑插件", "quiet") +
+    operation("copy-path", "复制目录", "quiet") +
+    operation("remove-plugin", "移除", "quiet") + "</div></div>";
 }
 
 async function load(importInstalled = false) {
@@ -147,15 +148,18 @@ async function check(items, apply) {
 }
 
 function edit(item) {
-  $("edit-title").textContent = item ? "修改来源" : "添加插件";
-  $("path").readOnly = Boolean(item);
-  $("folder").hidden = Boolean(item);
+  state.editing = item?.path ?? "";
+  $("edit-title").textContent = item ? "编辑插件" : "添加插件";
+  $("edit-help").textContent = item
+    ? "选择包含插件文件的目录，或填写新目录来复制插件。浏览器已加载的版本继续使用原来的目录。"
+    : "选择插件目录，或填写 ZIP、版本清单地址。留空目录时，新下载的插件会放入默认插件目录。";
+  $("path").placeholder = item ? "输入插件目录的绝对路径" : "留空使用默认插件目录";
   $("path").value = item?.path ?? "";
   $("source").value = item?.source ?? "";
   $("manifest").checked = item?.sourceKind === "manifest";
   $("edit-error").textContent = "";
   $("edit").showModal();
-  $(item ? "source" : "path").focus();
+  $("path").focus();
 }
 
 function focusRow(event) {
@@ -198,7 +202,12 @@ $("detail").addEventListener("change", (event) => {
 $("detail").addEventListener("click", (event) => {
   const item = focused();
   const id = event.target.id;
-  if (id === "edit-source") edit(item);
+  if (id === "edit-plugin") edit(item);
+  if (id === "remove-plugin") {
+    state.removing = item.path;
+    $("remove-description").textContent = "将从插件库移除「" + item.name + "」的记录。浏览器里的安装和本地文件会保留。";
+    $("remove-dialog").showModal();
+  }
   if (id === "update") check(selected().filter((entry) => entry.source), true);
   if (id === "copy-path") run("正在复制目录…", async () => {
     await api().Copy(item.path);
@@ -206,9 +215,10 @@ $("detail").addEventListener("click", (event) => {
   });
   if (id === "install" || id === "reload") {
     const install = id === "install";
-    run(install ? "正在打开浏览器扩展页…" : "正在让所选浏览器重新加载插件…", async () => {
+    run(install ? "正在把插件安装到所选浏览器…" : "正在让所选浏览器重新加载插件…", async () => {
       const paths = install ? [item.path] : selected().map((entry) => entry.path);
       const messages = await api().Activate([...state.targets], paths, install);
+      if (install) await load();
       schedule(messages.join("\n"));
     });
   }
@@ -228,6 +238,50 @@ async function pick(field, action) {
 }
 $("folder").addEventListener("click", () => pick("path", () => api().PickFolder()));
 $("zip").addEventListener("click", () => pick("source", () => api().PickZIP()));
+$("confirm-remove").addEventListener("click", () => {
+  const path = state.removing;
+  $("remove-dialog").close();
+  run("正在从插件库移除…", async () => {
+    await api().RemovePlugin(path);
+    state.results.delete(path);
+    state.checked.delete(path);
+    await load();
+    schedule("已从插件库移除。");
+  });
+});
+
+$("plugin-storage").addEventListener("click", async () => {
+  $("storage-feedback").textContent = "";
+  $("storage-path").value = "";
+  $("storage-dialog").showModal();
+  try {
+    $("storage-path").value = (await api().PluginStorage()).packageDir;
+  } catch (error) {
+    $("storage-feedback").textContent = String(error?.message ?? error);
+  }
+});
+$("pick-storage").addEventListener("click", async () => {
+  try {
+    const folder = await api().PickPluginStorage();
+    if (folder) $("storage-path").value = folder;
+  } catch (error) {
+    $("storage-feedback").textContent = String(error?.message ?? error);
+  }
+});
+$("storage-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if ($("save-storage").disabled) return;
+  $("save-storage").disabled = true;
+  try {
+    await api().SavePluginStorage($("storage-path").value);
+    $("storage-dialog").close();
+    schedule("默认插件目录已保存。");
+  } catch (error) {
+    $("storage-feedback").textContent = String(error?.message ?? error);
+  } finally {
+    $("save-storage").disabled = false;
+  }
+});
 $("source-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (state.busy) return;
@@ -236,8 +290,11 @@ $("source-form").addEventListener("submit", async (event) => {
   $("save").disabled = true;
   $("edit-error").textContent = "正在验证插件和更新源…";
   try {
-    const item = await api().Save($("path").value, $("source").value, $("manifest").checked ? "manifest" : "");
+    const fields = [$("path").value, $("source").value, $("manifest").checked ? "manifest" : ""];
+    const item = state.editing ? await api().EditPlugin(state.editing, ...fields) : await api().Save(...fields);
+    state.results.delete(state.editing);
     state.results.delete(item.path);
+    if (state.checked.delete(state.editing)) state.checked.add(item.path);
     state.focused = item.path;
     await load();
     $("edit").close();
