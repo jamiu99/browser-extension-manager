@@ -100,3 +100,7 @@ form > p:first-of-type { margin-bottom: 14px; }
 .settings-hint, .settings-feedback { font-size: 12px; }
 .settings-hint { margin: 0 0 13px; }
 .settings-feedback { min-height: 19px; margin-top: 10px; }
+.software-versions { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 16px 0 12px; }
+.software-versions dt { color: var(--muted); font-size: 12px; }
+.software-versions dd { margin: 3px 0 0; font-weight: 600; }
+#software-feedback { min-height: 20px; }

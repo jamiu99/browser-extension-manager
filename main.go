@@ -11,9 +11,11 @@ import (
 	goruntime "runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/jamiu99/browser-extension-manager/internal/cli"
 	"github.com/jamiu99/browser-extension-manager/internal/manager"
+	"github.com/jamiu99/browser-extension-manager/internal/selfupdate"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -35,9 +37,11 @@ var commit = ""
 var builtAt = ""
 
 type App struct {
-	ctx      context.Context
-	store    *manager.Store
-	browsers manager.BrowserSettings
+	ctx          context.Context
+	store        *manager.Store
+	browsers     manager.BrowserSettings
+	updateMu     sync.Mutex
+	updateNotice string
 }
 
 type Catalog struct {
@@ -202,12 +206,26 @@ func setSource(store *manager.Store, name, source string) error {
 }
 
 func main() {
+	notice, worker, updateErr := selfupdate.HandleArguments(os.Args[1:])
+	updateWorkspace := ""
+	if worker {
+		if updateErr != nil {
+			log.Fatal(updateErr)
+		}
+		return
+	}
+	if notice != "" {
+		updateWorkspace = os.Args[2]
+	}
+	if notice != "" || updateErr != nil {
+		os.Args = os.Args[:1]
+	}
 	dir, legacy, err := manager.DefaultPaths()
 	if err != nil {
 		log.Fatal(err)
 	}
 	browsers := manager.BrowserSettings{Dir: dir}
-	app := &App{store: manager.New(dir, legacy, browsers.Available), browsers: browsers}
+	app := &App{store: manager.New(dir, legacy, browsers.Available), browsers: browsers, updateNotice: notice}
 	if len(os.Args) > 1 {
 		name := os.Args[1]
 		switch {
@@ -238,6 +256,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: frontend},
 		Linux:            &linux.Options{Icon: appIcon, ProgramName: "extension-manager"},
 		OnStartup:        func(ctx context.Context) { app.ctx = ctx },
+		OnDomReady:       func(_ context.Context) { selfupdate.MarkReady(updateWorkspace) },
 		Bind:             []interface{}{app},
 	})
 	if err != nil {

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="app.css">
   <script src="app.js" defer></script>
   <script src="browser-settings.js" defer></script>
+  <script src="software-update.js" defer></script>
 </head>
 <body>
   <header class="top">
@@ -16,10 +17,11 @@
       <div><h1>插件库</h1><p id="count">正在读取插件</p></div>
     </div>
     <nav aria-label="插件库操作">
+      <button id="software-update" class="quiet">软件更新</button>
       <button id="browser-settings" class="quiet">浏览器设置</button>
       <button id="import" class="quiet">导入已安装</button>
       <button id="guide" class="quiet">更新源指南</button>
-      <button id="check">检查更新</button>
+      <button id="check">检查插件更新</button>
       <button id="add" class="primary">＋ 添加插件</button>
     </nav>
   </header>
@@ -77,6 +79,19 @@
         <button type="submit" id="browser-save" class="primary">保存设置</button>
       </div>
     </form>
+  </dialog>
+  <dialog id="software-update-dialog">
+    <header class="dialog-title"><h2>软件更新</h2><button type="button" class="close" data-close="software-update-dialog" aria-label="关闭">×</button></header>
+    <dl class="software-versions">
+      <div><dt>当前版本</dt><dd id="software-current">读取中</dd></div>
+      <div><dt>GitHub 最新正式版</dt><dd id="software-latest">待检查</dd></div>
+    </dl>
+    <p id="software-feedback" role="status" aria-live="polite"></p>
+    <div class="dialog-buttons">
+      <button id="software-releases" type="button" class="quiet">查看 GitHub 发布</button>
+      <button id="software-check" type="button">检查软件更新</button>
+      <button id="software-install" type="button" class="primary" hidden>更新并重启</button>
+    </div>
   </dialog>
 </body>
 </html>
